@@ -1,0 +1,27 @@
+{
+  "name": "graph-example",
+  "version": "0.0.1",
+  "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com:JoaoHenriquePereira/graph-example.git"
+  },
+  "keywords": [
+    "graph",
+    "es6",
+    "d3"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "app-root-path": "1.0.0",
+    "graphlib": "1.0.7",
+    "lodash": "3.10.0"
+  },
+  "devDependencies": {
+    "babel": "5.8.21",
+    "babel-eslint": "4.0.5"
+  },
+  "scripts": {
+    "build": "rm -rf dist/* && babel src/ --optional asyncToGenerator --loose --out-dir dist/"
+  }
+}

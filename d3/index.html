@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<meta charset='utf-8'>
+<style>
+
+.link {
+  stroke: none;
+}
+
+.linkLabel {
+  fill: none;
+}
+
+.node {
+  cursor: move;
+  fill: #fff;
+  stroke-width: 1.5px;
+}
+
+</style>
+<body>
+<script src='https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js'></script>
+<script>
+
+/**
+ * Declarations
+ */
+
+var colorMap = {
+  'AF': '#8A2BE2',
+  'AS': '#5F9EA0',
+  'AU': '#A52A2A',
+  'CE': '#6495ED',
+  'NA': '#DC143C',
+  'SA': '#B8860B'
+};
+
+var height = 900;
+var width = 1440;
+
+var force = d3.layout.force()
+    .gravity(0.05)
+    .distance(400)
+    .charge(-400)
+    .size([width, height]);
+
+var drag = force.drag()
+    .on('dragstart', dragStart);
+
+var map = {};
+var paths = [];
+var prev = null;
+
+var svg = d3.select('body').append('svg')
+    .attr('width', width)
+    .attr('height', height);
+
+d3.json('graph.json', function(error, json) {
+  if (error) throw error;
+
+  force
+      .nodes(json.nodes)
+      .links(json.links)
+      .start();
+
+  map = json.map;
+
+  var link = svg.selectAll('.link')
+      .data(json.links)
+      .enter().append('line')
+      .attr('class', function(d) { return 'link ' + d.source.name + d.target.name; })
+      .style('opacity', function(d) { return 0.4 * d.value; });
+
+  var linktext = svg.selectAll('g.linklabelholder').data(json.links);
+    linktext.enter().append('g').attr('class', 'linklabelholder')
+     .append('text')
+     .attr('class', function(d) { return 'linkLabel ' + d.source.name + d.target.name; })
+     .attr('dx', 1)
+     .attr('dy', '.35em')
+     .attr('font-family', 'sans-serif')
+     .attr('text-anchor', 'middle')
+     .text(function(d) { return d.value; });
+
+  var node = svg.selectAll('.node')
+      .data(json.nodes)
+      .enter().append('g')
+      .style('stroke', '#EB933A')
+      .attr('class', function(d) { return 'node ' + d.name })
+      .call(drag);
+
+  node.append('circle')
+      .style('stroke','gray')
+      .attr('class', 'circle')
+      .attr('r', 25);
+
+  node.append('text')
+      .attr('dx', '-1em')
+      .attr('dy', '.35em')
+      .style('font-family', 'sans-serif')
+      .style('font-size','16px')
+      .attr('class', 'nodeLabel')
+      .text(function(d) { return d.name });
+
+  force.on('tick', function() {
+    // Move the nodes
+    node.attr('transform', function(d) {
+      return 'translate(' + d.x + ',' + d.y + ')';
+    });
+
+    // Connect the nodes
+    link.attr('x1', function(d) { return d.source.x; })
+        .attr('y1', function(d) { return d.source.y; })
+        .attr('x2', function(d) { return d.target.x; })
+        .attr('y2', function(d) { return d.target.y; });
+
+    // Center text in the center of the edge
+    linktext.attr('transform', function(d) {
+      return 'translate(' + (d.source.x + d.target.x) / 2 + ','+ (d.source.y + d.target.y) / 2 + ')';
+    });
+  });
+});
+
+/**
+ * Build Path.
+ */
+
+function buildPath(subMap, response, source, target) {
+  var stepStone = [];
+  if (subMap[target].predecessor === source) {
+    stepStone.push(source);
+    stepStone.push(target);
+    response.push(stepStone);
+    response.reverse();
+  } else {
+    stepStone.push(subMap[target].predecessor);
+    stepStone.push(target);
+    response.push(stepStone);
+    buildPath(subMap, response, source, subMap[target].predecessor);
+  }
+  return response;
+}
+
+/**
+ * Drag start.
+ */
+
+function dragStart(d) {
+  if(prev !== null)
+    resetPaths(prev);
+  else {
+    prev = d;
+  }
+
+  paths = getPaths(d.name);
+  showLabels(d);
+  showTargets(d);
+  d3.select(this).classed('fixed', d.fixed = true)
+    .style('fill', function(s) { return colorMap[s.name] || '#acacac'; })
+    .select('.circle')
+    .style('stroke', '#111');
+}
+
+/**
+ * Get paths.
+ */
+
+function getPaths(source) {
+  var paths = [];
+  var subMap = map[source];
+
+  force.nodes().forEach(function(n) {
+    if(n.name !== source) {
+      var response = [];
+      paths.push(buildPath(subMap, response, source, n.name));
+    }
+  });
+
+  return paths;
+}
+
+/**
+ * Hide edges.
+ */
+
+function hideLabels() {
+  selectLabels()
+    .transition()
+    .filter(function(s) { return isEdge(s) })
+    .style('fill','none');
+}
+
+/**
+ * Hide targets.
+ */
+
+function hideTargets(d) {
+  selectNodeTargets()
+    .style('stroke', 'none');
+  selectNodeObject('node')
+    .style('fill', 'white')
+    .style('stroke', '#EB933A')
+    .select('.circle')
+    .style('stroke','gray');
+}
+
+/**
+ * Is edge.
+ */
+
+function isEdge(s) {
+  var result = false;
+
+  paths.forEach(function(p) {
+    p.forEach(function(c) {
+      if((c[0] === s.source.name && c[1] === s.target.name) || (c[0] === s.target.name && c[1] === s.source.name)) {
+        result = true;
+      }
+    });
+  });
+
+  return result;
+}
+
+/**
+ * Reset paths.
+ */
+
+function resetPaths(d) {
+  selectNodeObject(d.name).classed('fixed', d.fixed = false);
+  hideLabels();
+  hideTargets(d);
+}
+
+/**
+ * Select labels.
+ */
+
+function selectLabels() {
+  return d3.selectAll('.linkLabel')
+    .filter(function(s) { return isEdge(s) });
+}
+
+/**
+ * Select node object.
+ */
+
+function selectNodeObject(d) {
+  return d3.selectAll('.node')
+    .filter('.' + d);
+}
+
+/**
+ * Select node targets.
+ */
+
+function selectNodeTargets() {
+  return d3.selectAll('.link')
+    .filter(function(s) { return isEdge(s) });
+}
+
+/**
+ * Show labels.
+ */
+
+function showLabels(d) {
+  selectLabels()
+    .style('fill', 'white')
+    .transition()
+    .duration(1500)
+    .style('fill', '#381C47');
+}
+
+/**
+ * Show targets.
+ */
+
+function showTargets(d) {
+  selectNodeTargets()
+    .style('stroke', '#333');
+  selectNodeObject('node')
+    .style('fill', function(s) { return colorMap[s.name] || '#acacac'; })
+    .style('stroke', '#fff')
+    .select('.circle')
+    .style('stroke','#fff');
+}
+
+</script>
